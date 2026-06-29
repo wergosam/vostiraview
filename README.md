@@ -2,6 +2,8 @@
 
 **Moderner Bildbetrachter mit Bearbeitungsfunktionen – plattformunabhängig und leistungsstark**
 
+![GitHub Repository Manager – Screenshot](vostiraview.webp)
+
 ---
 
 ## 🇩🇪 Deutsch
