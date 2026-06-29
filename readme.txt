@@ -1,0 +1,3 @@
+Der Image Viewer ist ein moderner, plattformunabhängiger Bildbetrachter mit integrierten Bearbeitungsfunktionen, entwickelt in Python mit PyQt6. Er richtet sich an Benutzer, die eine schnelle, übersichtliche und leistungsfähige Alternative zu einfachen Betriebssystem‑Viewern suchen – mit einem klaren Fokus auf Effizienz, Benutzerfreundlichkeit und Erweiterbarkeit.
+
+The Image Viewer is a modern, cross-platform image viewer with built-in editing features, developed in Python using PyQt6. It is designed for users looking for a fast, intuitive, and powerful alternative to basic operating system viewers—with a clear focus on efficiency, user-friendliness, and extensibility.
