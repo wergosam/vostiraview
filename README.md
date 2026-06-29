@@ -2,7 +2,7 @@
 
 **Moderner Bildbetrachter mit Bearbeitungsfunktionen – plattformunabhängig und leistungsstark**
 
-![GitHub Repository Manager – Screenshot](vostiraview.webp)
+![GitHub Repository Manager – Screenshot](vostiraview01.webp)
 
 ---
 
