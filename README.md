@@ -3,9 +3,13 @@
 **Moderner Bildbetrachter mit Bearbeitungsfunktionen – plattformunabhängig und leistungsstark**
 
 ![GitHub Repository Manager – Screenshot](screenshots/vostiraview01.webp)
+<<<<<<< HEAD
 ![GitHub Repository Manager – Screenshot](screenshots/vostiraview02.webp)
 
 © 2026 vostiraview – Version 1.72
+=======
+
+>>>>>>> c73167466e689ede3e6130eb639a56757f3ec250
 ---
 
 ## 🇩🇪 Deutsch
