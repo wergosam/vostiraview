@@ -5,15 +5,11 @@ Verstärkungsfaktoren zurück; die eigentliche Anwendung auf das Originalbild
 übernimmt der Aufrufer (siehe ImageOperations.adjust_current_image).
 """
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-                             QSlider, QLabel, QDialogButtonBox, QPushButton,
-                             QMessageBox)
+                             QSlider, QLabel, QDialogButtonBox, QPushButton)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap, QImage
 from PIL import Image, ImageEnhance
 from i18n import tr
-
-# Toleranz, ab der ein Faktor als "verändert" gilt (Gleitkomma-Vergleich)
-_NEUTRAL_EPSILON = 1e-6
 
 
 def pil_to_qpixmap(img):
@@ -34,32 +30,14 @@ class AdjustDialog(QDialog):
         ("sharpness", "Schärfe"),
     ]
 
-    # Reihenfolge + zugehörige PIL-Enhancer-Klasse für apply_factors
-    _ENHANCERS = [
-        ("brightness", ImageEnhance.Brightness),
-        ("contrast", ImageEnhance.Contrast),
-        ("color", ImageEnhance.Color),
-        ("sharpness", ImageEnhance.Sharpness),
-    ]
-
     def __init__(self, image_path, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Bild anpassen"))
         self.setMinimumSize(560, 480)
 
-        # Nur die verkleinerte Vorschau dauerhaft im Speicher halten - das
-        # Originalbild wird nur kurz zum Erzeugen des Thumbnails geöffnet
-        # und danach sofort wieder freigegeben (wichtig bei großen Fotos).
-        try:
-            with Image.open(image_path) as img:
-                img.load()
-                self._preview_src = img.copy()
-        except (IOError, OSError) as e:
-            QMessageBox.critical(
-                parent, tr("Fehler"),
-                tr("Bild konnte nicht geöffnet werden:") + f"\n{e}"
-            )
-            self._preview_src = Image.new("RGB", (1, 1))
+        self._base = Image.open(image_path)
+        # Verkleinerte Kopie für die schnelle Live-Vorschau
+        self._preview_src = self._base.copy()
         self._preview_src.thumbnail((520, 360))
 
         layout = QVBoxLayout(self)
@@ -115,26 +93,19 @@ class AdjustDialog(QDialog):
         """Verstärkungsfaktoren (1.0 = neutral) für ImageEnhance."""
         return {key: 1.0 + self.sliders[key].value() / 100.0 for key, _ in self.CHANNELS}
 
-    @classmethod
-    def apply_factors(cls, img, f):
-        """Wendet die Faktoren auf ein PIL-Bild an (Alpha bleibt erhalten).
-
-        Enhancer mit neutralem Faktor (1.0) werden übersprungen, um bei der
-        Anwendung auf das volle Originalbild keine unnötigen Rechenschritte
-        durchzuführen.
-        """
+    @staticmethod
+    def apply_factors(img, f):
+        """Wendet die Faktoren auf ein PIL-Bild an (Alpha bleibt erhalten)."""
         alpha = None
         if img.mode in ("RGBA", "LA"):
             alpha = img.getchannel("A")
             img = img.convert("RGB")
         elif img.mode != "RGB":
             img = img.convert("RGB")
-
-        for key, enhancer_cls in cls._ENHANCERS:
-            factor = f[key]
-            if abs(factor - 1.0) > _NEUTRAL_EPSILON:
-                img = enhancer_cls(img).enhance(factor)
-
+        img = ImageEnhance.Brightness(img).enhance(f["brightness"])
+        img = ImageEnhance.Contrast(img).enhance(f["contrast"])
+        img = ImageEnhance.Color(img).enhance(f["color"])
+        img = ImageEnhance.Sharpness(img).enhance(f["sharpness"])
         if alpha is not None:
             img = img.convert("RGBA")
             img.putalpha(alpha)
@@ -155,6 +126,6 @@ class AdjustDialog(QDialog):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return None
         f = dlg.factors()
-        if all(abs(v - 1.0) < _NEUTRAL_EPSILON for v in f.values()):
+        if all(abs(v - 1.0) < 1e-6 for v in f.values()):
             return None  # keine Änderung
         return f

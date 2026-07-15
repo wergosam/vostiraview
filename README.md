@@ -2,6 +2,10 @@
 
 **Moderner Bildbetrachter mit Bearbeitungsfunktionen – plattformunabhängig und leistungsstark**
 
+![GitHub Repository Manager – Screenshot](screenshots/vostiraview01.webp)
+![GitHub Repository Manager – Screenshot](screenshots/vostiraview02.webp)
+
+© 2026 vostiraview – Version 1.72
 ---
 
 ## 🇩🇪 Deutsch
@@ -75,10 +79,6 @@
 **vostiraview** ist ein professioneller, aber dennoch einfacher Bildbetrachter, der sich durch seine **doppelte Galerie‑Ansicht**, die **umfangreichen Bearbeitungsfunktionen** und die **durchdachte Bedienung** auszeichnet. Ideal für Fotografen, Designer und alle, die täglich mit vielen Bildern arbeiten – ob zur schnellen Sichtung, zur Organisation oder zur einfachen Nachbearbeitung.
 
 > Probieren Sie es aus – die Tastaturkürzel machen Sie im Handumdrehen zum Profi! 🚀
-
----
-
-© 2026 vostiraview – Version 1.0
 
 ---
 

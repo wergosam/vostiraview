@@ -8,18 +8,15 @@ durch Ergänzen von _TRANSLATIONS hinzufügen.
 
 _lang = "de"
 
-_LANGUAGES = [("de", "Deutsch"), ("en", "English")]
-_LANGUAGE_CODES = {code for code, _ in _LANGUAGES}
-
 
 def available_languages():
     """Liste (code, Anzeigename) der verfügbaren Sprachen."""
-    return _LANGUAGES
+    return [("de", "Deutsch"), ("en", "English")]
 
 
 def set_language(code):
     global _lang
-    _lang = code if code in _LANGUAGE_CODES else "de"
+    _lang = code if code in {c for c, _ in available_languages()} else "de"
 
 
 def get_language():
@@ -240,6 +237,8 @@ _TRANSLATIONS = {
         "Datei(en) wiederhergestellt": "file(s) restored",
         "Papierkorb": "Trash",
         "Der Papierkorb ist bereits leer.": "The trash is already empty.",
+        "Datei(en) endgültig löschen? Dies kann nicht rückgängig gemacht werden.":
+            "Delete file(s) permanently? This cannot be undone.",
         "Papierkorb geleert": "Trash emptied",
         "Liste der zuletzt verwendeten Ordner geleert": "Recent folders list cleared",
         "(keine)": "(none)",
@@ -412,6 +411,7 @@ _TRANSLATIONS = {
         "Bitte wählen Sie ein Bild aus.": "Please select an image.",
         "Das ausgewählte Bild ist nicht in der Liste.": "The selected image is not in the list.",
         # Kontextmenü Viewer
+        "Kopieren (Pfad)": "Copy (path)",
         "Dateiname kopieren": "Copy file name",
         "Pfad kopieren": "Copy path",
         # Drop-Dialoge

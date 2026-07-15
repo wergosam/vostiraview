@@ -12,12 +12,14 @@ from i18n import tr
 
 
 def _fmt_size(b):
+    if b < 1024:
+        return f"{int(b)} B"
     size = float(b)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{int(size)} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+    for unit in ("KB", "MB", "GB"):
         size /= 1024
-    return f"{size:.1f} GB"
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}"
+    return f"{size:.1f} GB"  # nicht erreichbar, sichert Rückgabetyp
 
 
 class TrashDialog(QDialog):

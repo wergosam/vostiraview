@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget,
                              QTableWidgetItem, QHeaderView, QPushButton,
                              QLabel, QHBoxLayout)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QKeySequence
 
 class ShortcutsDialog(QDialog):
     def __init__(self, parent=None):
@@ -79,6 +79,7 @@ class ShortcutsDialog(QDialog):
         shortcuts = [
             # Navigation
             ("← / →", "Vorheriges / Nächstes Bild"),
+            ("Pfeil links / rechts", "Bildnavigation"),
 
             # Datei
             ("O", "Datei öffnen"),
@@ -139,6 +140,23 @@ class ShortcutsDialog(QDialog):
         close_btn = QPushButton("Schließen")
         close_btn.clicked.connect(self.accept)
         close_btn.setMinimumWidth(120)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px 30px;
+                font-weight: bold;
+                font-size: 12px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #388E3C;
+            }
+            QPushButton:pressed {
+                background-color: #2E7D32;
+            }
+        """)
         button_layout.addWidget(close_btn)
 
         button_layout.addStretch()

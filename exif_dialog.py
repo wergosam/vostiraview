@@ -8,9 +8,10 @@ import os
 from i18n import tr
 
 
-def gps_coordinates(exif):
-    """Liest GPS-Koordinaten aus einem EXIF-Dict. Gibt (lat, lon) oder None."""
+def gps_coordinates(image_path):
+    """Liest GPS-Koordinaten aus den EXIF-Daten. Gibt (lat, lon) oder None."""
     try:
+        exif = Image.open(image_path)._getexif()
         if not exif:
             return None
         gps = exif.get(0x8825)  # GPSInfo
@@ -141,21 +142,29 @@ class ExifDialog(QDialog):
         self.image_path = image_path
 
         # Aktions-Buttons
-        self._btn_row = QHBoxLayout()
+        btn_row = QHBoxLayout()
 
         self.remove_btn = QPushButton(tr("🧹 Metadaten entfernen…"))
         self.remove_btn.setToolTip(tr("Speichert das Bild ohne EXIF-/Metadaten (Datenschutz)."))
         self.remove_btn.clicked.connect(self._remove_metadata)
-        self._btn_row.addWidget(self.remove_btn)
+        btn_row.addWidget(self.remove_btn)
 
-        self._btn_row.addStretch(1)
+        coords = gps_coordinates(image_path)
+        if coords:
+            self._coords = coords
+            map_btn = QPushButton(tr("🗺 Auf Karte anzeigen"))
+            map_btn.setToolTip(f"{coords[0]:.6f}, {coords[1]:.6f} " + tr("– in OpenStreetMap öffnen"))
+            map_btn.clicked.connect(self._open_map)
+            btn_row.addWidget(map_btn)
+
+        btn_row.addStretch(1)
 
         close_btn = QPushButton(tr("Schließen"))
         close_btn.clicked.connect(self.accept)
         close_btn.setMinimumWidth(120)
-        self._btn_row.addWidget(close_btn)
+        btn_row.addWidget(close_btn)
 
-        layout.addLayout(self._btn_row)
+        layout.addLayout(btn_row)
 
         self.setLayout(layout)
         self.load_exif_data(image_path)
@@ -177,8 +186,8 @@ class ExifDialog(QDialog):
     def load_exif_data(self, image_path):
         """Lädt und zeigt EXIF-Daten an."""
         try:
-            with Image.open(image_path) as img:
-                exif_data = img._getexif()
+            img = Image.open(image_path)
+            exif_data = img._getexif()
 
             if not exif_data:
                 self.table.setRowCount(1)
@@ -187,39 +196,35 @@ class ExifDialog(QDialog):
                 self.raw_text.setText(tr("Keine EXIF-Daten gefunden."))
                 return
 
+            # Lese EXIF-Tags
+            row = 0
             raw_output = []
             for tag_id, value in exif_data.items():
                 tag_name = ExifTags.TAGS.get(tag_id, tag_id)
 
+                # Formatierte Darstellung
                 if isinstance(value, bytes):
                     try:
                         value_str = value.decode('utf-8', errors='ignore')
-                    except Exception:
+                    except:
                         value_str = str(value)
                 else:
                     value_str = str(value)
 
-                row = self.table.rowCount()
+                # Tabelle füllen
                 self.table.insertRow(row)
-                self.table.setItem(row, 0, QTableWidgetItem(str(tag_name)))
+                self.table.setItem(row, 0, QTableWidgetItem(tag_name))
                 self.table.setItem(row, 1, QTableWidgetItem(value_str))
-                raw_output.append(f"{tag_name}: {value_str}")
 
-            for i in range(self.table.rowCount()):
-                self.table.setRowHeight(i, 30)
+                # Rohdaten
+                raw_output.append(f"{tag_name}: {value_str}")
+                row += 1
+
+            # Zeilenhöhe anpassen
+            for row in range(self.table.rowCount()):
+                self.table.setRowHeight(row, 30)
 
             self.raw_text.setText("\n".join(raw_output))
-
-            # GPS-Button nachträglich hinzufügen wenn Koordinaten vorhanden
-            coords = gps_coordinates(exif_data)
-            if coords:
-                self._coords = coords
-                map_btn = QPushButton(tr("🗺 Auf Karte anzeigen"))
-                map_btn.setToolTip(f"{coords[0]:.6f}, {coords[1]:.6f} " + tr("– in OpenStreetMap öffnen"))
-                map_btn.clicked.connect(self._open_map)
-                # Vor dem Stretch einfügen (Stretch ist letztes Item)
-                stretch_pos = self._btn_row.count() - 1
-                self._btn_row.insertWidget(stretch_pos, map_btn)
 
         except Exception as e:
             self.table.setRowCount(1)

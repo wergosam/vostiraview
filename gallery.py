@@ -14,6 +14,7 @@ class ImageGallery(QScrollArea):
     image_clicked      = pyqtSignal(str)
     selection_changed  = pyqtSignal(list)
     images_dropped     = pyqtSignal(list)
+    context_requested  = pyqtSignal(str, object)
 
     def __init__(self, directory):
         super().__init__()
@@ -45,13 +46,12 @@ class ImageGallery(QScrollArea):
 
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']
 
-        self.default_columns = 5
         self.image_index = 0
         self.timer = QTimer()
         self.timer.timeout.connect(self.load_next_image)
 
         self.images = []
-        self.selected_images = set()
+        self.selected_images = []
         self.containers = {}
         self.image_labels = {}
         self.sort_criterion = "name"
@@ -187,12 +187,10 @@ class ImageGallery(QScrollArea):
     def add_images_to_gallery(self, image_paths):
         if not image_paths:
             return
-        existing = {os.path.join(self.directory, f) for f in self.images} if self.directory else set()
         added = 0
         for path in image_paths:
-            if os.path.exists(path) and path not in existing:
+            if os.path.exists(path) and path not in self.images:
                 self.images.append(os.path.basename(path))
-                existing.add(path)
                 added += 1
         if added > 0:
             self.sort_images()
@@ -209,11 +207,11 @@ class ImageGallery(QScrollArea):
     def toggle_selection(self, image_path):
         full_path = os.path.abspath(image_path)
         if full_path in self.selected_images:
-            self.selected_images.discard(full_path)
+            self.selected_images.remove(full_path)
         else:
-            self.selected_images.add(full_path)
+            self.selected_images.append(full_path)
         self.update_selection_frame(full_path)
-        self.selection_changed.emit(list(self.selected_images))
+        self.selection_changed.emit(self.selected_images)
 
     def update_selection_frame(self, full_path):
         if full_path in self.image_labels:
@@ -224,21 +222,21 @@ class ImageGallery(QScrollArea):
                 label.setStyleSheet("border: none;")
 
     def get_selected_images(self):
-        return list(self.selected_images)
+        return self.selected_images
 
     def clear_selection(self):
         for full_path in list(self.selected_images):
             if full_path in self.image_labels:
                 self.image_labels[full_path].setStyleSheet("border: none;")
         self.selected_images.clear()
-        self.selection_changed.emit([])
+        self.selection_changed.emit(self.selected_images)
 
     def select_all(self):
-        for full_path in self.image_labels:
+        for full_path in self.image_labels.keys():
             if full_path not in self.selected_images:
-                self.selected_images.add(full_path)
+                self.selected_images.append(full_path)
                 self.update_selection_frame(full_path)
-        self.selection_changed.emit(list(self.selected_images))
+        self.selection_changed.emit(self.selected_images)
 
     # === Bild mit Dateinamen ===
     def _add_filename_to_pixmap(self, pixmap, filename):
@@ -349,6 +347,9 @@ class ImageGallery(QScrollArea):
 
         self.image_index += 1
 
+    def on_image_click(self, image_path):
+        self.image_clicked.emit(image_path)
+
     # ===== KONTEXTMENÜ FÜR GALERIE =====
     def _on_press(self, event, path):
         if event.button() == Qt.MouseButton.RightButton:
@@ -413,7 +414,7 @@ class ImageGallery(QScrollArea):
             if item.widget():
                 item.widget().deleteLater()
         self.images = []
-        self.selected_images = set()
+        self.selected_images = []
         self.image_index = 0
         self.thumbnail_cache.clear()
         self.containers.clear()
@@ -431,7 +432,7 @@ class ImageGallery(QScrollArea):
         # Cache gelöschter Dateien verwerfen (Speicher freigeben)
         for cached_path in list(self.thumbnail_cache.keys()):
             if not os.path.exists(cached_path):
-                del self.thumbnail_cache[cached_path]
+                self.thumbnail_cache.pop(cached_path, None)
         # Nur die Grid-Widgets entfernen (Cache + Auswahl bleiben erhalten)
         while self.gallery_layout.count():
             item = self.gallery_layout.takeAt(0)

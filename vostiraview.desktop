@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=VostiraView
+GenericName=Bildbetrachter
+Comment=Bildbetrachter mit Bearbeitungsfunktionen
+Exec=vostiraview
+Icon=vostiraview
+Terminal=false
+Categories=Graphics;Viewer;Photography;
+StartupWMClass=VostiraView

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QSpinBox,
                              QTabWidget, QWidget, QComboBox, QLabel, QMessageBox)
 from PyQt6.QtCore import Qt
 from config import load_config, save_config
-from modules.trash import default_trash_dir
+from modules.trash import default_trash_dir, move_trash_contents, _enforce_limit
 from i18n import tr, available_languages
 
 
@@ -91,9 +91,9 @@ class SettingsDialog(QDialog):
         self.overwrite_check = QCheckBox(
             tr("Bearbeitungen (Drehen/Zuschneiden/Größe) direkt im Original speichern"))
         self.overwrite_check.setChecked(self.config.get("overwrite_on_edit", False))
-        self.overwrite_check.setToolTip(
+        self.overwrite_check.setToolTip(tr(
             "Ohne Speichern-Dialog. Vor jedem Überschreiben erfolgt eine "
-            "Sicherheitsabfrage; das Original wird im Papierkorb gesichert.")
+            "Sicherheitsabfrage; das Original wird im Papierkorb gesichert."))
         form.addRow(tr("Schnellbearbeitung:"), self.overwrite_check)
 
         return tab
@@ -148,7 +148,7 @@ class SettingsDialog(QDialog):
         self.quality_spin.setRange(1, 100)
         self.quality_spin.setSuffix(" %")
         self.quality_spin.setValue(int(self.config.get("export_quality", 95)))
-        self.quality_spin.setToolTip("Wirkt beim Speichern als JPEG oder WebP.")
+        self.quality_spin.setToolTip(tr("Wirkt beim Speichern als JPEG oder WebP."))
         form.addRow(tr("Speicherqualität (JPEG/WebP):"), self.quality_spin)
 
         return tab
@@ -172,31 +172,24 @@ class SettingsDialog(QDialog):
         if index >= 0:
             combo.setCurrentIndex(index)
 
-    def browse_directory(self):
-        """Öffnet einen Dialog zur Auswahl eines Bildverzeichnisses."""
-        start_dir = self.dir_edit.text() or os.path.expanduser("~")
+    def _browse_directory(self, title, line_edit):
+        """Öffnet einen Verzeichnis-Dialog und setzt den gewählten Pfad ins line_edit."""
+        start_dir = line_edit.text() or os.path.expanduser("~")
         directory = QFileDialog.getExistingDirectory(
-            self,
-            tr("Bildverzeichnis auswählen"),
-            start_dir,
-            QFileDialog.Option.ShowDirsOnly
+            self, title, start_dir, QFileDialog.Option.ShowDirsOnly
         )
         if directory:
-            self.dir_edit.setText(directory)
+            line_edit.setText(directory)
+
+    def browse_directory(self):
+        self._browse_directory(tr("Bildverzeichnis auswählen"), self.dir_edit)
 
     def browse_trash_directory(self):
-        """Öffnet einen Dialog zur Auswahl des Papierkorb-Ordners."""
-        start_dir = self.trash_dir_edit.text() or os.path.expanduser("~")
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            tr("Papierkorb-Ordner auswählen"),
-            start_dir,
-            QFileDialog.Option.ShowDirsOnly
-        )
-        if directory:
-            self.trash_dir_edit.setText(directory)
+        self._browse_directory(tr("Papierkorb-Ordner auswählen"), self.trash_dir_edit)
 
-    # ================= Speichern =================
+    def _resolved_trash_dir(self):
+        """Gibt den effektiven Papierkorb-Pfad zurück (Config oder Standardpfad)."""
+        return self.config.get("trash_directory", "") or default_trash_dir()
     def save_and_accept(self):
         """Speichert die Einstellungen und wendet sie (wo möglich) sofort an."""
         criterion = self.sort_criterion_combo.currentData()
@@ -214,7 +207,7 @@ class SettingsDialog(QDialog):
         self.config["window_height"] = self.win_height_spin.value()
 
         # Papierkorb: Standardpfad als leeren Wert speichern
-        old_trash_dir = self.config.get("trash_directory", "") or default_trash_dir()
+        old_trash_dir = self._resolved_trash_dir()
         new_trash_dir = self.trash_dir_edit.text()
         dir_changed = os.path.abspath(old_trash_dir) != os.path.abspath(new_trash_dir)
         self.config["trash_directory"] = "" if new_trash_dir == default_trash_dir() else new_trash_dir
@@ -237,22 +230,29 @@ class SettingsDialog(QDialog):
 
         # Bei Ordnerwechsel: vorhandene Dateien mitverschieben und den
         # Rückgängig-/Wiederholen-Stapel leeren (er verweist auf die alten Pfade)
-        from modules.trash import move_trash_contents, _enforce_limit
         parent = self.parent()
         if dir_changed:
-            moved = move_trash_contents(old_trash_dir, new_trash_dir)
+            try:
+                moved = move_trash_contents(old_trash_dir, new_trash_dir)
+            except OSError as e:
+                QMessageBox.warning(
+                    self, tr("Papierkorb-Ordner geändert"),
+                    tr("Der Ordner wurde gewechselt, aber vorhandene Dateien konnten nicht "
+                       "automatisch verschoben werden:") + f"\n{e}")
+                moved = 0
+
             had_history = False
             if parent and hasattr(parent, "undo_manager"):
                 had_history = parent.undo_manager.can_undo() or parent.undo_manager.can_redo()
                 parent.undo_manager.clear()
 
-            lines = ["Der Papierkorb-Ordner wurde geändert."]
+            lines = [tr("Der Papierkorb-Ordner wurde geändert.")]
             if moved:
-                lines.append(f"{moved} Datei(en) wurden in den neuen Ordner verschoben.")
+                lines.append(f"{moved} " + tr("Datei(en) wurden in den neuen Ordner verschoben."))
             if had_history:
-                lines.append("Der Rückgängig-/Wiederholen-Verlauf wurde geleert, "
-                             "da er auf den alten Ordner verwies.")
-            QMessageBox.information(self, "Papierkorb-Ordner geändert", "\n".join(lines))
+                lines.append(tr("Der Rückgängig-/Wiederholen-Verlauf wurde geleert, "
+                                "da er auf den alten Ordner verwies."))
+            QMessageBox.information(self, tr("Papierkorb-Ordner geändert"), "\n".join(lines))
 
         # Neues Limit sofort anwenden (z. B. wenn es verkleinert wurde)
         _enforce_limit()

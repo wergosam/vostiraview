@@ -55,6 +55,7 @@ class RotationDialog(QDialog):
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.radio_fixed.toggled.connect(self._toggle_input_fields)
+        self.radio_custom.toggled.connect(self._toggle_input_fields)
 
     def _toggle_input_fields(self):
         """Aktiviert/deaktiviert Eingabefelder je nach gewähltem Modus."""
@@ -66,7 +67,8 @@ class RotationDialog(QDialog):
         """Gibt den gewählten Rotationswinkel zurück."""
         if self.radio_fixed.isChecked():
             return int(self.fixed_angles.currentText().replace("°", ""))
-        return self.custom_angle.value()
+        else:
+            return self.custom_angle.value()
 
 
 def rotate_image(pixmap, angle):

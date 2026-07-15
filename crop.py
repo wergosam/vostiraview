@@ -1,14 +1,24 @@
+import sys
 import os
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
-                             QMessageBox, QPushButton, QLabel)
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QCursor
-from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal
+import shutil  # Für das Kopieren von Dateien
+from PyQt6.QtWidgets import (QMainWindow, QApplication, QVBoxLayout, QWidget,
+                             QFileDialog, QMessageBox, QToolBar, QLabel, QCheckBox,
+                             QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QPushButton, QHBoxLayout, QRubberBand)
+from PyQt6.QtGui import QAction, QIcon, QPixmap, QPainter, QPen, QColor, QCursor, QPixmapCache
+from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal, QSize
 from i18n import tr
 
 
 class ResizeHandle(QLabel):
     def __init__(self, parent=None, cursor=None):
         super().__init__(parent)
+        self.setMouseTracking(True)
+        self.start_point = None
+        self.end_point = None
+        self.crop_rect = None
+        self.is_cropping = False
+        self.is_resizing = False
+        self.resize_mode = None
         self.setFixedSize(10, 10)
         self.setStyleSheet("background-color: blue; border: 1px solid white;")
         self.setCursor(cursor)
@@ -139,17 +149,19 @@ class CroppableImageLabel(QLabel):
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        painter = QPainter(self)
 
+        # Zeichne das bestehende Crop-Rechteck
         if self.crop_rect:
+            painter = QPainter(self)
             painter.setPen(QPen(QColor(0, 120, 215), 2, Qt.PenStyle.SolidLine))
             painter.drawRect(self.crop_rect)
 
+        # Zeichne das temporäre Auswahlrechteck während des Ziehens
         if self.is_cropping and self.start_point and self.end_point:
-            painter.setPen(QPen(QColor(0, 120, 215), 2, Qt.PenStyle.DashLine))
-            painter.drawRect(self.create_crop_rect())
-
-        painter.end()
+            painter = QPainter(self)
+            painter.setPen(QPen(QColor(0, 120, 215), 2, Qt.PenStyle.DashLine))  # Gestrichelte Linie
+            selection_rect = self.create_crop_rect()
+            painter.drawRect(selection_rect)
 
     def create_crop_rect(self):
         if not self.start_point or not self.end_point:
@@ -158,9 +170,124 @@ class CroppableImageLabel(QLabel):
         x2, y2 = self.end_point.x(), self.end_point.y()
         return QRect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
 
+class ImageCropperApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+        self.original_pixmap = None
+        self.cropped_pixmap = None
+
+    def initUI(self):
+        self.setGeometry(100, 100, 800, 600)
+        central_widget = QWidget()
+        layout = QVBoxLayout()
+
+        # Horizontales Layout für die Buttons
+        button_layout = QHBoxLayout()
+
+        # Buttons erstellen
+        load_btn = QPushButton(tr('Bild laden'))
+        crop_btn = QPushButton(tr('Zuschneiden aktivieren'))
+        crop_save_btn = QPushButton(tr('Zuschneiden'))
+        cancel_btn = QPushButton(tr('Abbrechen'))
+        save_btn = QPushButton(tr('Bild speichern'))
+
+        # Button-Breiten setzen
+        button_width = 120  # Breite in Pixeln
+        for btn in [load_btn, crop_btn, crop_save_btn, cancel_btn, save_btn]:
+            btn.setFixedWidth(button_width)  # Feste Breite setzen
+
+        # Buttons mit Funktionen verbinden
+        load_btn.clicked.connect(self.load_image)
+        crop_btn.clicked.connect(self.toggle_crop_mode)
+        crop_save_btn.clicked.connect(self.crop_image)
+        cancel_btn.clicked.connect(self.cancel_crop)
+        save_btn.clicked.connect(self.save_cropped_image)
+
+        # Buttons dem Layout hinzufügen
+        button_layout.addWidget(load_btn)
+        button_layout.addWidget(crop_btn)
+        button_layout.addWidget(crop_save_btn)
+        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(save_btn)
+
+        # Layouts hinzufügen
+        layout.addLayout(button_layout)
+
+        # Bild-Label
+        self.image_label = CroppableImageLabel()
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.image_label)
+
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
+
+    def load_image(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            'Bild auswählen',
+            '',
+            'Bilder (*.png *.jpg *.jpeg *.bmp)'
+        )
+        if file_path:
+            # Den vollständigen Pfad als Klassenattribut speichern
+            self.last_file_path = file_path
+            self.original_pixmap = QPixmap(file_path)
+            self.display_image(self.original_pixmap)
+
+    def save_cropped_image(self):
+        if not self.image_label.pixmap():
+            QMessageBox.warning(self, tr('Fehler'), tr('Kein Bild zum Speichern'))
+            return
+
+        # Überprüfe, ob ein Dateipfad existiert
+        directory = os.path.dirname(self.last_file_path) if hasattr(self, 'last_file_path') else os.getcwd()
+        filename = os.path.basename(self.last_file_path) if hasattr(self, 'last_file_path') else "cropped_image.jpg"
+        name, ext = os.path.splitext(filename)
+        default_path = os.path.join(directory, f"{name}_cropped{ext}")
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            'Bild speichern',
+            default_path,
+            'JPEG-Dateien (*.jpg *.jpeg);;PNG-Dateien (*.png)'
+        )
+
+        if file_path:
+            try:
+                self.image_label.pixmap().save(file_path)
+                QMessageBox.information(self, tr('Erfolg'), tr('Bild wurde erfolgreich gespeichert.'))
+            except Exception as e:
+                QMessageBox.critical(self, tr('Fehler'), tr('Fehler beim Speichern:') + f' {e}')
+
+    def save_image(self):
+        if not self.image_label.pixmap():
+            QMessageBox.warning(self, tr('Fehler'), tr('Kein Bild zum Speichern'))
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(self, tr('Bild speichern'), '', 'JPEG-Dateien (*.jpg *.jpeg);;PNG-Dateien (*.png)')
+        if file_path:
+            self.image_label.pixmap().save(file_path)
+
+    def load_image_from_path(self, file_path):
+        if file_path:
+            self.original_pixmap = QPixmap(file_path)  # Speichere das Original
+            self.display_image(self.original_pixmap)
+            self.activate_crop_mode()
+
+    def display_image(self, pixmap):
+        scaled_pixmap = pixmap.scaled(self.image_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.image_label.setPixmap(scaled_pixmap)
+
+    def cancel_crop(self):
+        self.image_label.is_cropping = False
+        self.image_label.setCursor(Qt.CursorShape.ArrowCursor)
+        self.reset_crop_state()  # Setzt Crop-Status und Handles zurück
+        if self.parent_window:
+            self.parent_window.exit_crop_mode()
+
 class ImageCropperWidget(QWidget):
     cropped_image_signal = pyqtSignal(QPixmap)
-    DISPLAY_SIZE = (1280, 800)
 
     def __init__(self, parent=None):  # Parent hinzufügen
         super().__init__(parent)
@@ -213,8 +340,11 @@ class ImageCropperWidget(QWidget):
             self.activate_crop_mode()
 
     def display_image(self, pixmap):
-        target_width, target_height = self.DISPLAY_SIZE
+        # Definiere die feste Zielgröße
+        target_width = 1280
+        target_height = 800
 
+        # Skaliere das Pixmap unter Beibehaltung des Seitenverhältnisses
         scaled_pixmap = pixmap.scaled(
             target_width,
             target_height,
@@ -269,7 +399,8 @@ class ImageCropperWidget(QWidget):
             return
 
         # Get the dimensions
-        target_width, target_height = self.DISPLAY_SIZE
+        target_width = 1280
+        target_height = 800
 
         # Calculate the scaling of the displayed image
         display_scale = min(target_width / self.original_pixmap.width(),
@@ -313,3 +444,8 @@ class ImageCropperWidget(QWidget):
         self.image_label.crop_rect = None
         self.image_label.update()
 
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = ImageCropperApp()
+    window.show()
+    sys.exit(app.exec())

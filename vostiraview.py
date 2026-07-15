@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QMainWindow, QApplication, QVBoxLayout, QWidget,
                              QLabel, QSizePolicy, QStackedWidget, QMessageBox,
                              QFileDialog, QStatusBar, QMenu)
 from PyQt6.QtGui import (QPixmap, QKeyEvent, QWheelEvent, QFont, QFontMetrics,
-                         QDragEnterEvent, QDropEvent, QPainter)
+                         QDragEnterEvent, QDropEvent, QPainter, QIcon)
 from PyQt6.QtCore import Qt, QPoint, QTimer, QMimeData, QRect
 
 from config import load_config, save_config, get_last_directory, set_last_directory
@@ -37,6 +37,7 @@ class ImageViewerApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("VostiraView")
+        self.setWindowIcon(QIcon(resource_path("vostiraview_icon.svg")))
 
         # Config laden (wird u. a. für Start-Fenstergröße benötigt)
         self.config = load_config()
@@ -236,9 +237,7 @@ class ImageViewerApp(QMainWindow):
         self.statusBar.showMessage(f"{len(image_paths)} " + tr("Bild(er) in Galerie hinzugefügt"), 3000)
 
     # ==================== NEUE HILFSMETHODEN ====================
-    def _get_active_image_path(self) -> str | None:
-        """Gibt den Pfad des aktiv selektierten Bildes zurück (Galerie, Liste oder Viewer).
-        Zeigt eine Warnung und gibt None zurück, wenn kein Bild ausgewählt ist."""
+    def rename_selected_image(self):
         current = self.stacked_widget.currentIndex()
         path = None
         if current == 1:
@@ -254,20 +253,35 @@ class ImageViewerApp(QMainWindow):
                 path = self.image_loader.image_paths[self.image_loader.current_index]
             else:
                 QMessageBox.warning(self, tr("Kein Bild"), tr("Bitte wählen Sie ein Bild aus."))
-                return None
-        if path not in self.image_loader.image_paths:
-            QMessageBox.warning(self, tr("Fehler"), tr("Das ausgewählte Bild ist nicht in der Liste."))
-            return None
-        self.image_loader.current_index = self.image_loader.image_paths.index(path)
-        return path
-
-    def rename_selected_image(self):
-        if self._get_active_image_path() is not None:
+                return
+        if path in self.image_loader.image_paths:
+            self.image_loader.current_index = self.image_loader.image_paths.index(path)
             self.file_ops.rename_image()
+        else:
+            QMessageBox.warning(self, tr("Fehler"), tr("Das ausgewählte Bild ist nicht in der Liste."))
 
     def delete_selected_image(self):
-        if self._get_active_image_path() is not None:
+        current = self.stacked_widget.currentIndex()
+        path = None
+        if current == 1:
+            sel = self.gallery_widget.get_selected_images()
+            if sel:
+                path = sel[0]
+        elif current == 3:
+            sel = self.list_view_widget.get_selected_images()
+            if sel:
+                path = sel[0]
+        if path is None:
+            if self.image_loader.image_paths and self.image_loader.current_index >= 0:
+                path = self.image_loader.image_paths[self.image_loader.current_index]
+            else:
+                QMessageBox.warning(self, tr("Kein Bild"), tr("Bitte wählen Sie ein Bild aus."))
+                return
+        if path in self.image_loader.image_paths:
+            self.image_loader.current_index = self.image_loader.image_paths.index(path)
             self.image_ops.delete_image()
+        else:
+            QMessageBox.warning(self, tr("Fehler"), tr("Das ausgewählte Bild ist nicht in der Liste."))
 
     def open_settings(self):
         from ui.settings_dialog import SettingsDialog
@@ -278,6 +292,9 @@ class ImageViewerApp(QMainWindow):
     def setup_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
+        if central.layout() is not None:
+            old = central.layout()
+            QWidget().setLayout(old)
         self.layout = QVBoxLayout()
         central.setLayout(self.layout)
 
@@ -406,13 +423,8 @@ class ImageViewerApp(QMainWindow):
             return
         file_name = os.path.basename(image_path)
         file_size = os.path.getsize(image_path) / 1024
-        # Bereits geladenes Original-Pixmap wiederverwenden statt Bild neu laden
-        pm = self.image_loader._original_pixmap
-        if pm and not pm.isNull():
-            width, height = pm.width(), pm.height()
-        else:
-            tmp = QPixmap(image_path)
-            width, height = tmp.width(), tmp.height()
+        img = QPixmap(image_path).toImage()
+        width, height = img.width(), img.height()
         fm = QFontMetrics(self.image_info_label.font())
         short_name = fm.elidedText(file_name, Qt.TextElideMode.ElideMiddle, 800)
         info = f"{short_name}  ▒  {width}x{height}px  ▒  {file_size:.2f} KB  ▒  {self.image_loader.current_index+1}/{len(self.image_loader.image_paths)}"
@@ -633,6 +645,7 @@ class ImageViewerApp(QMainWindow):
         if not cur or not os.path.exists(cur):
             return
         menu = QMenu(self)
+        act_copy = menu.addAction(tr("Kopieren (Pfad)"))
         act_rename = menu.addAction(tr("Umbenennen"))
         act_delete = menu.addAction(tr("Löschen"))
         act_save_as = menu.addAction(tr("Speichern unter"))
@@ -644,7 +657,9 @@ class ImageViewerApp(QMainWindow):
         act_reset_zoom = menu.addAction(tr("Zoom zurücksetzen"))
 
         action = menu.exec(self.image_viewer.mapToGlobal(pos))
-        if action == act_rename:
+        if action == act_copy:
+            QApplication.clipboard().setText(cur)
+        elif action == act_rename:
             self.rename_selected_image()
         elif action == act_delete:
             self.delete_selected_image()
@@ -688,32 +703,42 @@ class ImageViewerApp(QMainWindow):
         in_gallery = current == 1
         in_list = current == 3
         in_gallery_or_list = in_gallery or in_list
-        viewer_only = not in_gallery_or_list
 
         self.viewer_view_btn.setChecked(current == 0)
         self.gallery_btn.setChecked(in_gallery)
         self.list_view_btn.setChecked(in_list)
 
-        always_visible = [
-            self.viewer_view_btn, self.gallery_btn, self.list_view_btn,
-            self.sort_btn, self.fullscreen_btn, self.search_btn,
-            self.copy_btn, self.cut_btn,
-            self.save_as_btn, self.rename_btn, self.delete_btn,
-        ]
-        for btn in always_visible:
-            btn.setVisible(True)
+        self.viewer_view_btn.setVisible(True)
+        self.gallery_btn.setVisible(True)
+        self.list_view_btn.setVisible(True)
+        self.sort_btn.setVisible(True)
+        self.fullscreen_btn.setVisible(True)
+        self.search_btn.setVisible(True)
 
-        viewer_only_btns = [
-            self.slideshow_btn,
-            self.zoom_btn, self.zoom_in_btn, self.zoom_out_btn,
-            self.zoom_fit_btn, self.zoom_actual_btn,
-            self.crop_btn, self.resize_btn,
-            self.rotate_btn, self.rotate_left_btn, self.rotate_right_btn,
-            self.flip_h_btn, self.flip_v_btn, self.adjust_btn,
-            self.prev_btn, self.next_btn,
-        ]
-        for btn in viewer_only_btns:
-            btn.setVisible(viewer_only)
+        self.copy_btn.setVisible(True)
+        self.cut_btn.setVisible(True)
+
+        self.slideshow_btn.setVisible(not in_gallery_or_list)
+
+        self.save_as_btn.setVisible(True)
+        self.rename_btn.setVisible(True)
+        self.delete_btn.setVisible(True)
+
+        self.zoom_btn.setVisible(not in_gallery_or_list)
+        self.zoom_in_btn.setVisible(not in_gallery_or_list)
+        self.zoom_out_btn.setVisible(not in_gallery_or_list)
+        self.zoom_fit_btn.setVisible(not in_gallery_or_list)
+        self.zoom_actual_btn.setVisible(not in_gallery_or_list)
+        self.crop_btn.setVisible(not in_gallery_or_list)
+        self.resize_btn.setVisible(not in_gallery_or_list)
+        self.rotate_btn.setVisible(not in_gallery_or_list)
+        self.rotate_left_btn.setVisible(not in_gallery_or_list)
+        self.rotate_right_btn.setVisible(not in_gallery_or_list)
+        self.flip_h_btn.setVisible(not in_gallery_or_list)
+        self.flip_v_btn.setVisible(not in_gallery_or_list)
+        self.adjust_btn.setVisible(not in_gallery_or_list)
+        self.prev_btn.setVisible(not in_gallery_or_list)
+        self.next_btn.setVisible(not in_gallery_or_list)
 
     def undo_last_action(self):
         """Macht die zuletzt hinterlegte Operation rückgängig."""
@@ -725,6 +750,7 @@ class ImageViewerApp(QMainWindow):
 
     def update_undo_redo_actions(self):
         """Aktiviert/deaktiviert Rückgängig & Wiederholen und passt die Texte an."""
+        from i18n import tr
         if hasattr(self, "undo_action"):
             desc = self.undo_manager.peek_undo()
             self.undo_action.setEnabled(self.undo_manager.can_undo())
@@ -839,35 +865,44 @@ class ImageViewerApp(QMainWindow):
             self.statusBar.showMessage(tr("Papierkorb geleert") + f" ({removed})", 3000)
 
     def update_menu_items(self):
-        current = self.stacked_widget.currentIndex()
-        in_gallery_or_list = current in (1, 3)
-        viewer_only = not in_gallery_or_list
+        in_gallery = self.stacked_widget.currentIndex() == 1
+        in_list = self.stacked_widget.currentIndex() == 3
+        in_gallery_or_list = in_gallery or in_list
 
-        always_visible = [
-            self.gallery_action, self.list_view_action, self.select_dir_action,
-            self.sort_menu.menuAction(), self.delete_action,
-            self.exit_action, self.shortcuts_action,
-        ]
-        for act in always_visible:
-            act.setVisible(True)
+        self.gallery_action.setVisible(True)
+        self.list_view_action.setVisible(True)
+        self.select_dir_action.setVisible(True)
+        self.sort_menu.menuAction().setVisible(True)
+        self.delete_action.setVisible(True)
+        self.exit_action.setVisible(True)
+        self.shortcuts_action.setVisible(True)
 
-        viewer_only_actions = [
-            self.slideshow_action,
-            self.open_action, self.save_as_action, self.rename_action,
-            self.zoom_action, self.zoom_in_action, self.zoom_out_action,
-            self.zoom_fit_action, self.zoom_actual_action,
-            self.crop_action, self.resize_action,
-            self.rotate_action, self.rotate_left_action, self.rotate_right_action,
-            self.flip_h_action, self.flip_v_action,
-            self.adjust_action, self.exif_action,
-        ]
-        for act in viewer_only_actions:
-            act.setVisible(viewer_only)
+        self.slideshow_action.setVisible(not in_gallery_or_list)
+
+        self.open_action.setVisible(not in_gallery_or_list)
+        self.save_as_action.setVisible(not in_gallery_or_list)
+        self.rename_action.setVisible(not in_gallery_or_list)
+        self.zoom_action.setVisible(not in_gallery_or_list)
+        self.zoom_in_action.setVisible(not in_gallery_or_list)
+        self.zoom_out_action.setVisible(not in_gallery_or_list)
+        self.zoom_fit_action.setVisible(not in_gallery_or_list)
+        self.zoom_actual_action.setVisible(not in_gallery_or_list)
+        self.crop_action.setVisible(not in_gallery_or_list)
+        self.resize_action.setVisible(not in_gallery_or_list)
+        self.rotate_action.setVisible(not in_gallery_or_list)
+        self.rotate_left_action.setVisible(not in_gallery_or_list)
+        self.rotate_right_action.setVisible(not in_gallery_or_list)
+        self.flip_h_action.setVisible(not in_gallery_or_list)
+        self.flip_v_action.setVisible(not in_gallery_or_list)
+        self.adjust_action.setVisible(not in_gallery_or_list)
+        self.exif_action.setVisible(not in_gallery_or_list)
 
 
 def main():
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(resource_path("vostiraview_icon.svg")))
     viewer = ImageViewerApp()
+    viewer.resize(1280, 800)
     viewer.show()
     sys.exit(app.exec())
 

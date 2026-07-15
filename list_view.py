@@ -36,6 +36,7 @@ class SortableItem(QTreeWidgetItem):
 # ── Format-Farben ─────────────────────────────────────────────────────────────
 FORMAT_COLORS = {
     "JPG":  QColor(255, 248, 220),
+    "JPEG": QColor(255, 248, 220),
     "PNG":  QColor(220, 235, 255),
     "GIF":  QColor(220, 255, 220),
     "BMP":  QColor(255, 220, 220),
@@ -74,6 +75,7 @@ class ThumbnailCache:
 class ImageListView(QWidget):
     image_clicked     = pyqtSignal(str)
     image_activated   = pyqtSignal(str)
+    context_requested = pyqtSignal(str, object)
     delete_requested  = pyqtSignal(str)
     rename_requested  = pyqtSignal(str)
 
@@ -169,8 +171,6 @@ class ImageListView(QWidget):
                 size_str = "—"
 
             fmt = ext.lstrip(".").upper()
-            # JPEG normalisieren → einheitlicher Lookup in FORMAT_COLORS
-            fmt_key = "JPG" if fmt == "JPEG" else fmt
 
             w, h = self._read_resolution(full_path)
             pixel_count = w * h
@@ -192,7 +192,7 @@ class ImageListView(QWidget):
             item.setTextAlignment(3, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             item.setTextAlignment(4, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
 
-            color = FORMAT_COLORS.get(fmt_key)
+            color = FORMAT_COLORS.get(fmt)
             if color:
                 for col in range(5):
                     item.setBackground(col, color)
@@ -201,6 +201,8 @@ class ImageListView(QWidget):
 
         self._items = items
         self.tree.addTopLevelItems(items)
+
+        self._load_index = 0
         self._load_timer.start()
 
     def _load_next_batch(self):
@@ -240,22 +242,21 @@ class ImageListView(QWidget):
             self._load()
 
     # ── Ereignisse ───────────────────────────────────────────────────────────
-    def _emit_if_exists(self, item, signal):
-        full_path = item.text(SortableItem.COL_PATH)
-        if full_path and os.path.exists(full_path):
-            signal.emit(full_path)
-
     def _on_single_click(self, item, _col):
-        self._emit_if_exists(item, self.image_clicked)
+        full_path = item.text(5)
+        if full_path and os.path.exists(full_path):
+            self.image_clicked.emit(full_path)
 
     def _on_double_click(self, item, _col):
-        self._emit_if_exists(item, self.image_activated)
+        full_path = item.text(5)
+        if full_path and os.path.exists(full_path):
+            self.image_activated.emit(full_path)
 
     def _on_context_menu(self, pos):
         item = self.tree.itemAt(pos)
         if not item:
             return
-        full_path = item.text(SortableItem.COL_PATH)
+        full_path = item.text(5)
 
         menu = QMenu(self)
 

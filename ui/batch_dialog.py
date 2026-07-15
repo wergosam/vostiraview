@@ -1,56 +1,14 @@
 """Dialog für die Stapelverarbeitung (Konvertieren / Verkleinern)."""
 import os
-import threading
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QHBoxLayout,
                              QComboBox, QCheckBox, QSpinBox, QLineEdit,
                              QPushButton, QLabel, QDialogButtonBox, QProgressDialog,
-                             QMessageBox, QFileDialog)
-from PyQt6.QtCore import Qt, QThread, QObject, QEventLoop, pyqtSignal
+                             QMessageBox, QFileDialog, QApplication)
+from PyQt6.QtCore import Qt
 
 from modules.image_export import SUPPORTED_FORMATS, get_export_quality
 from modules.batch_processor import process_batch
 from i18n import tr
-
-
-class _BatchWorker(QObject):
-    """Führt process_batch in einem eigenen Thread aus.
-
-    Dadurch bleibt die GUI während der Verarbeitung responsiv, ohne dass
-    QApplication.processEvents() im Hauptthread aufgerufen werden muss
-    (das bei langen Stapeln zu Reentrancy-Problemen führen kann, z.B. wenn
-    der Nutzer währenddessen andere Aktionen auslöst).
-    """
-
-    progress = pyqtSignal(int, int)
-    finished = pyqtSignal(int, list)
-    error = pyqtSignal(str)
-
-    def __init__(self, paths, output_dir, target_format, max_size, quality):
-        super().__init__()
-        self._paths = paths
-        self._output_dir = output_dir
-        self._target_format = target_format
-        self._max_size = max_size
-        self._quality = quality
-        self._cancel_event = threading.Event()
-
-    def cancel(self):
-        """Thread-sicher von außen aufrufbar (z.B. aus dem GUI-Thread)."""
-        self._cancel_event.set()
-
-    def run(self):
-        try:
-            ok, failed = process_batch(
-                self._paths, self._output_dir,
-                target_format=self._target_format,
-                max_size=self._max_size,
-                quality=self._quality,
-                on_progress=lambda done, total: self.progress.emit(done, total),
-                should_cancel=self._cancel_event.is_set,
-            )
-            self.finished.emit(ok, failed)
-        except Exception as e:
-            self.error.emit(str(e))
 
 
 class BatchDialog(QDialog):
@@ -84,7 +42,7 @@ class BatchDialog(QDialog):
         size_row.addWidget(self.resize_check)
         size_row.addWidget(self.size_spin)
         size_row.addStretch(1)
-        form.addRow(tr("Größe:"), size_row)
+        form.addRow("Größe:", size_row)
 
         # Qualität (JPEG/WebP)
         self.quality_spin = QSpinBox()
@@ -128,15 +86,6 @@ class BatchDialog(QDialog):
             "output_dir": self.out_edit.text().strip(),
         }
 
-    @staticmethod
-    def _would_overwrite_originals(paths, output_dir, target_format):
-        """Prüft, ob die Verarbeitung mit hoher Wahrscheinlichkeit die
-        Originaldateien überschreiben würde (gleicher Ordner, gleiches Format)."""
-        if target_format is not None:
-            return False
-        src_dirs = {os.path.dirname(os.path.abspath(p)) for p in paths}
-        return os.path.abspath(output_dir) in src_dirs
-
     @classmethod
     def run(cls, parent, paths):
         """Zeigt den Dialog und führt bei Bestätigung die Stapelverarbeitung aus."""
@@ -148,67 +97,25 @@ class BatchDialog(QDialog):
             QMessageBox.warning(parent, tr("Stapelverarbeitung"), tr("Bitte einen Zielordner angeben."))
             return
 
-        if cls._would_overwrite_originals(paths, opt["output_dir"], opt["target_format"]):
-            reply = QMessageBox.question(
-                parent, tr("Stapelverarbeitung"),
-                tr("Der Zielordner entspricht dem Quellordner. Vorhandene Originaldateien "
-                   "könnten überschrieben werden. Trotzdem fortfahren?"),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-
         progress = QProgressDialog(tr("Verarbeite Bilder…"), tr("Abbrechen"), 0, len(paths), parent)
         progress.setWindowTitle(tr("Stapelverarbeitung"))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
 
-        thread = QThread(parent)
-        worker = _BatchWorker(
+        def on_progress(done, total):
+            progress.setValue(done)
+            QApplication.processEvents()
+
+        ok, failed = process_batch(
             paths, opt["output_dir"],
             target_format=opt["target_format"],
             max_size=opt["max_size"],
             quality=opt["quality"],
+            on_progress=on_progress,
+            should_cancel=progress.wasCanceled,
         )
-        worker.moveToThread(thread)
-
-        result = {"ok": 0, "failed": [], "error": None}
-        loop = QEventLoop()
-
-        def on_progress(done, total):
-            progress.setValue(done)
-
-        def on_finished(ok, failed):
-            result["ok"] = ok
-            result["failed"] = failed
-            loop.quit()
-
-        def on_error(message):
-            result["error"] = message
-            loop.quit()
-
-        progress.canceled.connect(worker.cancel)
-        worker.progress.connect(on_progress)
-        worker.finished.connect(on_finished)
-        worker.error.connect(on_error)
-        thread.started.connect(worker.run)
-        thread.start()
-
-        loop.exec()  # blockiert nur diesen Aufruf, GUI bleibt responsiv
-
-        thread.quit()
-        thread.wait()
         progress.setValue(len(paths))
 
-        if result["error"] is not None:
-            QMessageBox.critical(
-                parent, tr("Stapelverarbeitung"),
-                tr("Fehler bei der Verarbeitung:") + f"\n{result['error']}"
-            )
-            return
-
-        ok, failed = result["ok"], result["failed"]
         msg = f"{ok} " + tr("Bild(er) verarbeitet.") + "\n" + tr("Gespeichert in:") + \
             f"\n{opt['output_dir']}"
         if failed:

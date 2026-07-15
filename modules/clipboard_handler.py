@@ -1,9 +1,7 @@
 import os
-import shutil
-from PyQt6.QtCore import Qt, QMimeData
+from PyQt6.QtCore import Qt, QMimeData, QUrl
 from PyQt6.QtGui import QKeyEvent
-from PyQt6.QtWidgets import QMessageBox, QFileDialog, QApplication
-from PyQt6.QtCore import QUrl
+from PyQt6.QtWidgets import QMessageBox, QApplication
 from i18n import tr
 
 

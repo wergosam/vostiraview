@@ -95,7 +95,6 @@ def resize_current_image(parent, image_path, output_path=None):
 
             resized_path = resize_image(
                 image_path,
-                img=img,
                 width=width,
                 height=height,
                 scale_percent=percent,
@@ -110,7 +109,7 @@ def resize_current_image(parent, image_path, output_path=None):
     return None
 
 
-def resize_image(image_path, width=None, height=None, scale_percent=None, parent=None, output_path=None, img=None):
+def resize_image(image_path, width=None, height=None, scale_percent=None, parent=None, output_path=None):
     """
     Ändert die Größe eines Bildes nach Pixeldimensionen oder in Prozent.
 
@@ -120,20 +119,20 @@ def resize_image(image_path, width=None, height=None, scale_percent=None, parent
         height (int, optional): Neue Höhe in Pixeln
         scale_percent (int, optional): Prozentsatz zum Skalieren des Bildes
         parent (QWidget, optional): Übergeordnetes Widget für Dialoge
-        img (Image, optional): Bereits geöffnetes PIL-Image (vermeidet doppeltes Laden)
 
     Rückgabe:
         str: Pfad zum skalierten Bild oder None, wenn abgebrochen
     """
-    if img is None:
-        img = Image.open(image_path)
+    img = Image.open(image_path)
 
-    if scale_percent is not None:
+    if scale_percent:
         width = int(img.width * scale_percent / 100)
         height = int(img.height * scale_percent / 100)
 
-    width = width or img.width
-    height = height or img.height
+    if width is None:
+        width = img.width
+    if height is None:
+        height = img.height
 
     resized_img = img.resize((width, height), Image.LANCZOS)
 

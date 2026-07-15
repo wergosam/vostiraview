@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vostiraview"
+version = "1.72"
+description = "Bildbetrachter mit Bearbeitungsfunktionen"
+readme = "readme.md"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "Jürg Rechsteiner", email = "jrechsteiner@bluewin.ch" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt6",
+    "Pillow",
+]
+
+[project.urls]
+Homepage = "https://computer-experte.ch"
+Source = "https://github.com/wergosam/vostiraview"
+
+[project.scripts]
+vostiraview = "vostiraview:main"
+
+[tool.setuptools]
+py-modules = [
+    "vostiraview",
+    "config",
+    "crop",
+    "exif_dialog",
+    "gallery",
+    "i18n",
+    "list_view",
+    "resize",
+    "rotation",
+    "utils",
+]
+packages = ["modules", "ui"]

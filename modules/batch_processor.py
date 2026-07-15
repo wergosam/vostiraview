@@ -62,18 +62,18 @@ def process_batch(paths, output_dir, target_format=None, max_size=None,
                 fmt = format_for_extension(src_ext) or "PNG"
                 out_ext = src_ext.lstrip(".").lower() or "png"
 
-            with Image.open(src) as im:
-                img = im.copy()
+            with Image.open(src) as img:
+                if max_size and max(img.size) > max_size:
+                    img.thumbnail((max_size, max_size), Image.LANCZOS)
+                dst = _unique_path(os.path.join(output_dir, f"{base}.{out_ext}"))
+                save_pil_image(img, dst, fmt, quality)
 
-            if max_size and max(img.size) > max_size:
-                img.thumbnail((max_size, max_size), Image.LANCZOS)
-
-            dst = _unique_path(os.path.join(output_dir, f"{base}.{out_ext}"))
-            save_pil_image(img, dst, fmt, quality)
             ok += 1
+            if on_progress:
+                on_progress(i + 1, total)
         except Exception as e:
             failed.append((src, str(e)))
-        if on_progress:
-            on_progress(i + 1, total)
+            if on_progress:
+                on_progress(i + 1, total)
 
     return ok, failed
