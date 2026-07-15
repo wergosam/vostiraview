@@ -13,6 +13,6 @@ pkgbase = vostiraview
 	depends = python-pyqt6
 	depends = python-pillow
 	source = vostiraview-1.72.tar.gz::https://github.com/wergosam/vostiraview/archive/refs/tags/v1.72.tar.gz
-	sha256sums = SKIP
+	sha256sums = 05369f4cdbf62fea734295683a59d5085993fb98f01d5d74ac4bba1f7328e75c
 
 pkgname = vostiraview
